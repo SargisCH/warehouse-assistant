@@ -1,4 +1,4 @@
-name: Deploy assistant to Cloudflare Pages
+name: Deploy assistant to Cloudflare Workers
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: warehouse-assistant-pages
+  group: warehouse-assistant-workers
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +23,6 @@ jobs:
       REACT_APP_COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
       REACT_APP_COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
       REACT_APP_WAREHOUSE_URL: ${{ vars.WAREHOUSE_URL }}
-      PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +37,7 @@ jobs:
           node <<'NODE'
           const required = [
             'REACT_APP_API_URL', 'REACT_APP_COGNITO_USER_POOL_ID',
-            'REACT_APP_COGNITO_CLIENT_ID', 'PAGES_PROJECT',
+            'REACT_APP_COGNITO_CLIENT_ID',
             'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID',
           ];
           for (const name of required) {
@@ -47,9 +46,6 @@ jobs:
           const api = new URL(process.env.REACT_APP_API_URL);
           if (api.protocol !== 'https:' || !api.pathname.endsWith('/api/v1/') || api.search || api.hash || api.username || api.password) {
             throw new Error('API_URL must be an HTTPS API URL ending in /api/v1/, without credentials, query or fragment.');
-          }
-          if (!/^[a-z0-9][a-z0-9-]*$/.test(process.env.PAGES_PROJECT)) {
-            throw new Error('CLOUDFLARE_PAGES_PROJECT must be a Pages project name.');
           }
           if (process.env.REACT_APP_WAREHOUSE_URL && new URL(process.env.REACT_APP_WAREHOUSE_URL).protocol !== 'https:') {
             throw new Error('WAREHOUSE_URL must use HTTPS.');
@@ -65,4 +61,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy build --project-name=${{ env.PAGES_PROJECT }} --branch=${{ github.ref_name }}
+          command: deploy

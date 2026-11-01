@@ -58,19 +58,19 @@ CI=true npm test -- --watchAll=false --runInBand
 
 Deploy `build/` to your static host with HTTPS. Configure a fallback rewrite to `/index.html` for all app routes, including `/plans/*` and `/threads/*`; otherwise email links will return hosting 404 errors. Set the backend/worker `ASSISTANT_APP_URL` to this exact origin and restart them. There is no public plan-sharing endpoint and no separate object/file storage.
 
-### Cloudflare Pages
+### Cloudflare Workers
 
-The workflow `.github/workflows/deploy-pages.yml` tests, builds and directly
-uploads to Pages on pushes to `main` or manual runs. No Cloudflare GitHub
-connection is required. Create a Direct Upload Pages project first, with
-production branch `main`.
+The workflow `.github/workflows/deploy-workers.yml` tests, builds and directly
+uploads to Workers on pushes to `main` or manual runs. No Cloudflare GitHub
+connection is required. Wrangler creates or updates the `warehouse-assistant`
+Worker configured in `wrangler.jsonc`.
 
 In GitHub **Settings → Secrets and variables → Actions**, configure repository
 secrets:
 
 | Secret | Value |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | API token with Account → Cloudflare Pages → Edit for the target account |
+| `CLOUDFLARE_API_TOKEN` | API token with Account → Workers Scripts → Edit for the target account |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
 | `API_URL` | Backend HTTPS URL ending in `/api/v1/` |
 
@@ -78,19 +78,18 @@ Configure repository variables:
 
 | Variable | Value |
 | --- | --- |
-| `CLOUDFLARE_PAGES_PROJECT` | Existing Direct Upload Pages project name |
 | `COGNITO_USER_POOL_ID` | Existing Warehouse user pool ID |
 | `COGNITO_CLIENT_ID` | Public app client ID with SRP enabled and no client secret |
 | `WAREHOUSE_URL` | Optional HTTPS business-app URL |
 
-Frontend settings are compiled into the build in GitHub Actions; changing Pages
+Frontend settings are compiled into the build in GitHub Actions; changing Cloudflare
 build environment settings will not change these direct uploads. Never put
 backend, Gemini or Resend secrets in frontend settings. Push to `main` or use
-**Actions → Deploy assistant to Cloudflare Pages → Run workflow**.
+**Actions → Deploy assistant to Cloudflare Workers → Run workflow**.
 
-The included `public/_redirects` provides the SPA fallback for plan and thread
-links. After the first deployment, set `ASSISTANT_APP_URL` in both
-`/srv/warehouse-api/shared/.env` and `.env.worker` to the exact Pages or custom
+The `assets.not_found_handling` setting in `wrangler.jsonc` provides the SPA
+fallback for plan and thread links; do not add a catch-all `_redirects` rule. After the first deployment, set `ASSISTANT_APP_URL` in both
+`/srv/warehouse-api/shared/.env` and `.env.worker` to the exact Workers or custom
 HTTPS origin (without a path). Restart `warehouse-api` and
 `warehouse-assistant-worker`. Verify developer login, the inbox, and a plan link
 opened directly in a fresh tab. Existing plans are available without email.
