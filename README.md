@@ -60,13 +60,33 @@ Deploy `build/` to your static host with HTTPS. Configure a fallback rewrite to 
 
 ### Cloudflare Pages
 
-Connect this GitHub repository to a new Cloudflare Pages project. Use production
-branch `main`, build command `npm run build`, output directory `build`, and the
-repository root as the build root. Set `NODE_VERSION=24` and
-`GENERATE_SOURCEMAP=false`, plus all four public `REACT_APP_*` values from
-`.env.production.example`, in the Pages production build environment. Use a
-public Cognito client without a secret, with `ALLOW_USER_SRP_AUTH` enabled.
-Environment changes require a new build. Never upload backend or worker secrets.
+The workflow `.github/workflows/deploy-pages.yml` tests, builds and directly
+uploads to Pages on pushes to `main` or manual runs. No Cloudflare GitHub
+connection is required. Create a Direct Upload Pages project first, with
+production branch `main`.
+
+In GitHub **Settings → Secrets and variables → Actions**, configure repository
+secrets:
+
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | API token with Account → Cloudflare Pages → Edit for the target account |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
+| `API_URL` | Backend HTTPS URL ending in `/api/v1/` |
+
+Configure repository variables:
+
+| Variable | Value |
+| --- | --- |
+| `CLOUDFLARE_PAGES_PROJECT` | Existing Direct Upload Pages project name |
+| `COGNITO_USER_POOL_ID` | Existing Warehouse user pool ID |
+| `COGNITO_CLIENT_ID` | Public app client ID with SRP enabled and no client secret |
+| `WAREHOUSE_URL` | Optional HTTPS business-app URL |
+
+Frontend settings are compiled into the build in GitHub Actions; changing Pages
+build environment settings will not change these direct uploads. Never put
+backend, Gemini or Resend secrets in frontend settings. Push to `main` or use
+**Actions → Deploy assistant to Cloudflare Pages → Run workflow**.
 
 The included `public/_redirects` provides the SPA fallback for plan and thread
 links. After the first deployment, set `ASSISTANT_APP_URL` in both
