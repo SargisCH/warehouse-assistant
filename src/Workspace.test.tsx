@@ -96,6 +96,63 @@ beforeEach(() => {
   action.mockResolvedValue({});
 });
 
+test('creates a standalone feature request and opens its conversation', async () => {
+  const handler = api.getMockImplementation()!;
+  api.mockImplementation((path: string, options?: RequestInit) => {
+    if (path === 'assistant/threads' && options?.method === 'POST')
+      return Promise.resolve({ id: threadId });
+    return handler(path, options);
+  });
+  render(<App configured />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'New request', exact: true }),
+  );
+  const submit = screen.getByRole('button', { name: 'Submit request' });
+  expect((submit as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText('What would you like to build?'), {
+    target: { value: '  Add a delivery planning page  ' },
+  });
+  fireEvent.click(submit);
+  await waitFor(() =>
+    expect(window.location.pathname).toBe(`/threads/${threadId}`),
+  );
+  expect(api).toHaveBeenCalledWith('assistant/threads', {
+    method: 'POST',
+    body: JSON.stringify({
+      mode: 'FEEDBACK',
+      body: 'Add a delivery planning page',
+      page: '',
+    }),
+  });
+  expect(await screen.findByText('Review the plan')).toBeTruthy();
+  expect(action).not.toHaveBeenCalled();
+});
+
+test('preserves the request draft after a submission failure', async () => {
+  const handler = api.getMockImplementation()!;
+  api.mockImplementation((path: string, options?: RequestInit) => {
+    if (options?.method === 'POST')
+      return Promise.reject(new Error('Service unavailable'));
+    return handler(path, options);
+  });
+  render(<App configured />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'New request', exact: true }),
+  );
+  fireEvent.change(screen.getByLabelText('What would you like to build?'), {
+    target: { value: 'New reports page' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Submit request' }));
+  expect(await screen.findByText('Service unavailable')).toBeTruthy();
+  expect(
+    (
+      screen.getByLabelText(
+        'What would you like to build?',
+      ) as HTMLTextAreaElement
+    ).value,
+  ).toBe('New reports page');
+});
+
 test('non-developers are denied without fetching private plans', async () => {
   api.mockResolvedValue({ assistantAccess: 'CONTRIBUTOR' });
   render(<App configured />);
