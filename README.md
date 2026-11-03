@@ -33,6 +33,11 @@ CONTRIBUTOR and NONE accounts cannot enter the workspace. API checks enforce per
 
 ## Links and review
 
+Use **New request** in the inbox to propose a feature, new page, or improvement
+without opening a particular business-app page. Submit a description to create a
+conversation and queue an AI plan. The request uses the same review and explicit
+approval flow as contributor feedback; submission does not start coding.
+
 - `/`: inbox, with filters and search across the most recent 100 conversations returned by the existing API.
 - `/threads/<thread-id>`: discussion and latest plan.
 - `/plans/<plan-id>`: exact immutable plan version, used in notification emails.

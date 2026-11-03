@@ -26,13 +26,21 @@ export default function Workspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [composing, setComposing] = useState(false);
+  const [requestBody, setRequestBody] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
   const route = readRoute(path);
   const navigate = (next: string) => {
+    setComposing(false);
     window.history.pushState(null, '', next);
     setPath(next);
   };
   useEffect(() => {
-    const back = () => setPath(window.location.pathname);
+    const back = () => {
+      setComposing(false);
+      setPath(window.location.pathname);
+    };
     window.addEventListener('popstate', back);
     return () => window.removeEventListener('popstate', back);
   }, []);
@@ -119,6 +127,35 @@ export default function Workspace({
         t.status === filter),
   );
   const didChange = useCallback(() => setRefresh((n) => n + 1), []);
+  async function createRequest(event: React.FormEvent) {
+    event.preventDefault();
+    if (!requestBody.trim() || creating) return;
+    setCreating(true);
+    setCreateError('');
+    try {
+      const created = await request<{ id: string }>('assistant/threads', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'FEEDBACK',
+          body: requestBody.trim(),
+          page: '',
+        }),
+      });
+      setRequestBody('');
+      setFilter('REVIEW');
+      setSearch('');
+      navigate(`/threads/${created.id}`);
+      didChange();
+    } catch (e) {
+      if (e instanceof ApiError && [401, 403].includes(e.status)) accessLost();
+      else
+        setCreateError(
+          e instanceof Error ? e.message : 'Could not create the request.',
+        );
+    } finally {
+      setCreating(false);
+    }
+  }
   return (
     <div className="workspace">
       <header className="topbar">
@@ -137,6 +174,14 @@ export default function Workspace({
             <span className="count">{threads.length}</span>
           </div>
           <p className="muted">You decide what gets built.</p>
+          <button
+            onClick={() => {
+              setCreateError('');
+              setComposing(true);
+            }}
+          >
+            New request
+          </button>
           <label className="sr-only" htmlFor="search">
             Search feedback
           </label>
@@ -179,7 +224,7 @@ export default function Workspace({
                   {label(t.status)}
                 </span>
                 <strong>{t.preview || 'Conversation'}</strong>
-                <small>{t.page}</small>
+                <small>{t.page || 'No specific page'}</small>
                 <small>{new Date(t.updatedAt).toLocaleDateString()}</small>
               </button>
             ))}
@@ -200,7 +245,50 @@ export default function Workspace({
               </button>
             </div>
           )}
-          {route.type === 'missing' ? (
+          {composing ? (
+            <section className="new-request">
+              <h1>New request</h1>
+              <p className="muted">
+                Describe a new feature, page, or improvement. This request is
+                not tied to a page. The assistant will prepare a plan for your
+                review.
+              </p>
+              <form onSubmit={createRequest}>
+                <label htmlFor="request-body">
+                  What would you like to build?
+                </label>
+                <textarea
+                  id="request-body"
+                  value={requestBody}
+                  onChange={(e) => setRequestBody(e.target.value)}
+                  maxLength={8000}
+                  rows={8}
+                  required
+                  disabled={creating}
+                  placeholder="For example: Add a page where managers can track upcoming deliveries."
+                />
+                {createError && (
+                  <p role="alert" className="banner error">
+                    {createError}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={creating || !requestBody.trim()}
+                >
+                  {creating ? 'Submitting…' : 'Submit request'}
+                </button>{' '}
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={creating}
+                  onClick={() => setComposing(false)}
+                >
+                  Cancel
+                </button>
+              </form>
+            </section>
+          ) : route.type === 'missing' ? (
             <div className="empty">
               <h1>Page not found</h1>
               <button onClick={() => navigate('/')}>Open inbox</button>
@@ -380,7 +468,7 @@ export function PlanReview({
                 {thread.page} ↗
               </a>
             ) : (
-              thread.page
+              thread.page || 'No specific page'
             )}{' '}
             · Release {thread.release}
           </p>
