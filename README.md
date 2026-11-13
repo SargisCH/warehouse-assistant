@@ -101,3 +101,5 @@ opened directly in a fresh tab. Existing plans are available without email.
 
 Cloudflare Access can additionally guard the dashboard domain. The dashboard
 continues using Cognito to authenticate its requests to the existing backend.
+
+Finit conversations are labeled **Finit Expenses** in the inbox. They share this developer review workspace and use manual implementation; contributor login remains in Finit, without Cognito. See warehouse-backend `docs/finit-integration.md` for setup.

@@ -300,3 +300,16 @@ test('routes and exported context keep version and revision explicit', () => {
     'Plan feedback revision: 1\nCurrent feedback revision: 2',
   );
 });
+
+it('shows manual implementation controls for Finit plans', () => {
+  review({ ...thread, project: 'finit' });
+  expect(
+    screen.queryByRole('button', { name: 'Approve & start' }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByText(/Finit plans are ready for manual implementation/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('button', { name: 'Deployed—ready to test' }),
+  ).toBeInTheDocument();
+});
