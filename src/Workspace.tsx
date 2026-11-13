@@ -223,6 +223,9 @@ export default function Workspace({
                 >
                   {label(t.status)}
                 </span>
+                <small>
+                  {t.project === 'finit' ? 'Finit Expenses' : 'Warehouse'}
+                </small>
                 <strong>{t.preview || 'Conversation'}</strong>
                 <small>{t.page || 'No specific page'}</small>
                 <small>{new Date(t.updatedAt).toLocaleDateString()}</small>
@@ -381,6 +384,7 @@ export function PlanReview({
   const stale = !!plan && plan.threadRevision !== thread.revision;
   const current = !!plan && plan.id === latest?.id;
   const canApprove =
+    thread.project !== 'finit' &&
     !!plan &&
     current &&
     !stale &&
@@ -625,43 +629,50 @@ export function PlanReview({
               Plan {plan.id} · Version {plan.version}
             </small>
           </details>
-          <div className="approval-box">
-            <div>
-              <h3>Your approval starts coding</h3>
-              <p>
-                Opening, copying, or editing this plan does not authorize
-                implementation. Merging and deployment require a separate
-                review.
-              </p>
-            </div>
-            {confirm ? (
-              <div role="group" aria-label="Confirm implementation">
-                <p>Start implementation of plan version {plan.version}?</p>
-                <div className="actions">
-                  <button
-                    disabled={busy || !canApprove || confirm !== plan.id}
-                    onClick={() => perform('approve', { planId: confirm })}
-                  >
-                    Confirm & start
-                  </button>
-                  <button
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() => setConfirm(undefined)}
-                  >
-                    Cancel
-                  </button>
-                </div>
+          {thread.project === 'finit' ? (
+            <p className="muted">
+              Finit plans are ready for manual implementation. Copy the plan for
+              your coding tool.
+            </p>
+          ) : (
+            <div className="approval-box">
+              <div>
+                <h3>Your approval starts coding</h3>
+                <p>
+                  Opening, copying, or editing this plan does not authorize
+                  implementation. Merging and deployment require a separate
+                  review.
+                </p>
               </div>
-            ) : (
-              <button
-                disabled={busy || !canApprove}
-                onClick={() => setConfirm(plan.id)}
-              >
-                Approve & start
-              </button>
-            )}
-          </div>
+              {confirm ? (
+                <div role="group" aria-label="Confirm implementation">
+                  <p>Start implementation of plan version {plan.version}?</p>
+                  <div className="actions">
+                    <button
+                      disabled={busy || !canApprove || confirm !== plan.id}
+                      onClick={() => perform('approve', { planId: confirm })}
+                    >
+                      Confirm & start
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => setConfirm(undefined)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  disabled={busy || !canApprove}
+                  onClick={() => setConfirm(plan.id)}
+                >
+                  Approve & start
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
       {!plan && thread.mode === 'FEEDBACK' && (
@@ -702,7 +713,9 @@ export function PlanReview({
           >
             Dismiss
           </button>
-          {thread.status === 'CODE_REVIEW' && (
+          {(thread.status === 'CODE_REVIEW' ||
+            (thread.project === 'finit' &&
+              thread.status === 'NEEDS_REVIEW')) && (
             <button
               disabled={busy || running}
               onClick={() => {

@@ -1,5 +1,6 @@
 export type Thread = {
   id: string;
+  project?: 'warehouse' | 'finit';
   mode: 'QUESTION' | 'FEEDBACK';
   page: string;
   release: string;
