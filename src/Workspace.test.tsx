@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { fetchAuthSession, signIn } from 'aws-amplify/auth';
@@ -312,4 +313,80 @@ it('shows manual implementation controls for Finit plans', () => {
   expect(
     screen.getByRole('button', { name: 'Deployed—ready to test' }),
   ).toBeInTheDocument();
+});
+
+test('filters Open and Done by project and moves a completed plan to Done', async () => {
+  const finitId = '44444444-4444-4444-8444-444444444444';
+  const finishedId = '55555555-5555-4555-8555-555555555555';
+  let status = 'NEEDS_REVIEW';
+  const warehouse = { ...thread, preview: 'Warehouse filter request' };
+  const finit = {
+    ...thread,
+    id: finitId,
+    project: 'finit',
+    preview: 'Finit open request',
+  };
+  const finished = {
+    ...finit,
+    id: finishedId,
+    status: 'RESOLVED',
+    preview: 'Finit completed request',
+  };
+
+  api.mockImplementation(async (path: string) => {
+    if (path === 'assistant/access') {
+      return { assistantAccess: 'DEVELOPER', userId: 'dev', tenantId: 1 };
+    }
+    if (path === 'assistant/threads')
+      return [{ ...warehouse, status }, finit, finished];
+    return { ...warehouse, status };
+  });
+  action.mockImplementation(async () => {
+    status = 'RESOLVED';
+    return { saved: true };
+  });
+
+  render(
+    <Workspace
+      email="dev@example.com"
+      logout={jest.fn()}
+      accessLost={jest.fn()}
+      accountKey="dev:1"
+      sessionChanged={jest.fn()}
+    />,
+  );
+  expect(
+    await screen.findByText('Warehouse filter request'),
+  ).toBeInTheDocument();
+  expect(screen.getByText('Finit open request')).toBeInTheDocument();
+  expect(screen.queryByText('Finit completed request')).not.toBeInTheDocument();
+
+  const project = screen.getByRole('combobox', { name: 'Project' });
+  fireEvent.change(project, { target: { value: 'finit' } });
+  expect(
+    screen.queryByText('Warehouse filter request'),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('tab', { name: 'Done' }));
+  expect(screen.getByText('Finit completed request')).toBeInTheDocument();
+  expect(screen.queryByText('Finit open request')).not.toBeInTheDocument();
+
+  fireEvent.change(project, { target: { value: 'warehouse' } });
+  fireEvent.click(screen.getByRole('tab', { name: 'Open' }));
+  fireEvent.click(screen.getByText('Warehouse filter request'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark done' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(threadId, 'status', {
+      status: 'RESOLVED',
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('tab', { name: 'Done' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    ),
+  );
+  expect(screen.getByText('Warehouse filter request')).toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: 'Mark done' }),
+  ).not.toBeInTheDocument();
 });
