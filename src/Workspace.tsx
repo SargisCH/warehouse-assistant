@@ -5,6 +5,13 @@ import Markdown from './Markdown';
 import { copyText, exportForAI, readRoute } from './plan-export';
 import { Access, Conversation, Plan, Thread } from './types';
 const label = (value: string) => value.toLowerCase().replace(/_/g, ' ');
+const projects = {
+  warehouse: 'Warehouse',
+  finit: 'Finit Expenses',
+} as const;
+type ProjectFilter = 'all' | keyof typeof projects;
+type InboxTab = 'open' | 'done';
+const isDone = (status: string) => ['RESOLVED', 'DISMISSED'].includes(status);
 export default function Workspace({
   email,
   logout,
@@ -21,7 +28,9 @@ export default function Workspace({
   const [path, setPath] = useState(window.location.pathname);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [detail, setDetail] = useState<Conversation>();
-  const [filter, setFilter] = useState('REVIEW');
+  const [tab, setTab] = useState<InboxTab>('open');
+  const [project, setProject] = useState<ProjectFilter>('all');
+  const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,21 +121,43 @@ export default function Workspace({
     // The route comes entirely from path. Keep polling independent of render identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, refresh, accountKey]);
-  const visible = threads.filter(
-    (t) =>
-      (!search ||
-        `${t.preview} ${t.page}`
-          .toLowerCase()
-          .includes(search.toLowerCase())) &&
+  const projectThreads = threads.filter(
+    (thread) =>
+      project === 'all' || (thread.project ?? 'warehouse') === project,
+  );
+  const visible = projectThreads.filter(
+    (thread) =>
+      isDone(thread.status) === (tab === 'done') &&
+      `${thread.preview ?? ''} ${thread.page}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()) &&
       (filter === 'ALL' ||
         (filter === 'REVIEW' &&
-          t.mode === 'FEEDBACK' &&
-          ['OPEN', 'NEEDS_REVIEW'].includes(t.status)) ||
+          thread.mode === 'FEEDBACK' &&
+          ['OPEN', 'NEEDS_REVIEW'].includes(thread.status)) ||
         (filter === 'PROGRESS' &&
-          ['IN_PROGRESS', 'CODE_REVIEW'].includes(t.status)) ||
-        t.status === filter),
+          ['IN_PROGRESS', 'CODE_REVIEW'].includes(thread.status)) ||
+        thread.status === filter),
   );
-  const didChange = useCallback(() => setRefresh((n) => n + 1), []);
+  const changeTab = (next: InboxTab) => {
+    setTab(next);
+    setFilter('ALL');
+  };
+  const didChange = useCallback((resolvedId?: string) => {
+    if (resolvedId) {
+      setTab('done');
+      setFilter('ALL');
+      setThreads((list) =>
+        list.map((thread) =>
+          thread.id === resolvedId ? { ...thread, status: 'RESOLVED' } : thread,
+        ),
+      );
+      setDetail((thread) =>
+        thread?.id === resolvedId ? { ...thread, status: 'RESOLVED' } : thread,
+      );
+    }
+    setRefresh((n) => n + 1);
+  }, []);
   async function createRequest(event: React.FormEvent) {
     event.preventDefault();
     if (!requestBody.trim() || creating) return;
@@ -142,7 +173,8 @@ export default function Workspace({
         }),
       });
       setRequestBody('');
-      setFilter('REVIEW');
+      changeTab('open');
+      setProject('all');
       setSearch('');
       navigate(`/threads/${created.id}`);
       didChange();
@@ -171,7 +203,7 @@ export default function Workspace({
         <aside className="inbox">
           <div className="inbox-heading">
             <h1>Review inbox</h1>
-            <span className="count">{threads.length}</span>
+            <span className="count">{visible.length}</span>
           </div>
           <p className="muted">You decide what gets built.</p>
           <button
@@ -191,50 +223,113 @@ export default function Workspace({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <label className="sr-only" htmlFor="filter">
-            Filter inbox
+          <label className="project-label" htmlFor="project">
+            Project
           </label>
           <select
-            id="filter"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            id="project"
+            value={project}
+            onChange={(e) => setProject(e.target.value as ProjectFilter)}
           >
-            <option value="REVIEW">Needs review</option>
-            <option value="ALL">All conversations</option>
-            <option value="PROGRESS">In progress</option>
-            <option value="READY_TO_TEST">Ready to test</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="DEFERRED">Deferred</option>
-            <option value="DISMISSED">Dismissed</option>
+            <option value="all">All projects</option>
+            {Object.entries(projects).map(([id, name]) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
           </select>
-          <nav aria-label="Feedback conversations">
-            {visible.map((t) => (
+          <div
+            className="inbox-tabs"
+            role="tablist"
+            aria-label="Ticket status"
+            onKeyDown={(event) => {
+              if (
+                !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)
+              )
+                return;
+              event.preventDefault();
+              const next =
+                event.key === 'Home'
+                  ? 'open'
+                  : event.key === 'End'
+                  ? 'done'
+                  : tab === 'open'
+                  ? 'done'
+                  : 'open';
+              changeTab(next);
+              document.getElementById(`inbox-tab-${next}`)?.focus();
+            }}
+          >
+            {(['open', 'done'] as const).map((value) => (
               <button
-                key={t.id}
-                className={`thread-card ${
-                  detail?.id === t.id ? 'selected' : ''
-                }`}
-                onClick={() => navigate(`/threads/${t.id}`)}
+                key={value}
+                id={`inbox-tab-${value}`}
+                type="button"
+                role="tab"
+                tabIndex={tab === value ? 0 : -1}
+                aria-selected={tab === value}
+                aria-controls="inbox-tickets"
+                onClick={() => changeTab(value)}
               >
-                <span
-                  className={`status ${
-                    t.status === 'NEEDS_REVIEW' ? 'review' : ''
-                  }`}
-                >
-                  {label(t.status)}
-                </span>
-                <small>
-                  {t.project === 'finit' ? 'Finit Expenses' : 'Warehouse'}
-                </small>
-                <strong>{t.preview || 'Conversation'}</strong>
-                <small>{t.page || 'No specific page'}</small>
-                <small>{new Date(t.updatedAt).toLocaleDateString()}</small>
+                {value === 'open' ? 'Open' : 'Done'}
               </button>
             ))}
-          </nav>
-          {!loading && !visible.length && (
-            <p className="muted">No conversations in this view.</p>
-          )}
+          </div>
+          <div
+            id="inbox-tickets"
+            role="tabpanel"
+            aria-labelledby={`inbox-tab-${tab}`}
+          >
+            <label className="sr-only" htmlFor="filter">
+              Filter ticket status
+            </label>
+            <select
+              id="filter"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            >
+              <option value="ALL">All statuses</option>
+              {tab === 'open' ? (
+                <>
+                  <option value="REVIEW">Needs review</option>
+                  <option value="PROGRESS">In progress</option>
+                  <option value="READY_TO_TEST">Ready to test</option>
+                  <option value="DEFERRED">Deferred</option>
+                </>
+              ) : (
+                <>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="DISMISSED">Dismissed</option>
+                </>
+              )}
+            </select>
+            <nav aria-label="Feedback conversations">
+              {visible.map((t) => (
+                <button
+                  key={t.id}
+                  className={`thread-card ${
+                    detail?.id === t.id ? 'selected' : ''
+                  }`}
+                  onClick={() => navigate(`/threads/${t.id}`)}
+                >
+                  <span
+                    className={`status ${
+                      t.status === 'NEEDS_REVIEW' ? 'review' : ''
+                    }`}
+                  >
+                    {label(t.status)}
+                  </span>
+                  <small>{projects[t.project ?? 'warehouse']}</small>
+                  <strong>{t.preview || 'Conversation'}</strong>
+                  <small>{t.page || 'No specific page'}</small>
+                  <small>{new Date(t.updatedAt).toLocaleDateString()}</small>
+                </button>
+              ))}
+            </nav>
+            {!loading && !visible.length && (
+              <p className="muted">No conversations in this view.</p>
+            )}
+          </div>
           <button className="quiet" onClick={() => navigate('/')}>
             Inbox overview
           </button>
@@ -243,7 +338,7 @@ export default function Workspace({
           {error && (
             <div role="alert" className="banner error">
               {error}
-              <button className="quiet" onClick={didChange}>
+              <button className="quiet" onClick={() => didChange()}>
                 Retry
               </button>
             </div>
@@ -321,14 +416,17 @@ export default function Workspace({
               <div className="summary-grid">
                 <div>
                   <strong>
-                    {threads.filter((t) => t.status === 'NEEDS_REVIEW').length}
+                    {
+                      projectThreads.filter((t) => t.status === 'NEEDS_REVIEW')
+                        .length
+                    }
                   </strong>
                   <span>Plans to review</span>
                 </div>
                 <div>
                   <strong>
                     {
-                      threads.filter((t) =>
+                      projectThreads.filter((t) =>
                         ['IN_PROGRESS', 'CODE_REVIEW'].includes(t.status),
                       ).length
                     }
@@ -337,7 +435,10 @@ export default function Workspace({
                 </div>
                 <div>
                   <strong>
-                    {threads.filter((t) => t.status === 'READY_TO_TEST').length}
+                    {
+                      projectThreads.filter((t) => t.status === 'READY_TO_TEST')
+                        .length
+                    }
                   </strong>
                   <span>Ready to test</span>
                 </div>
@@ -359,7 +460,7 @@ export function PlanReview({
 }: {
   conversation: Conversation;
   navigate: (path: string) => void;
-  didChange: () => void;
+  didChange: (resolvedId?: string) => void;
   accessLost: () => void;
 }) {
   const latest = thread.plans[0];
@@ -397,7 +498,8 @@ export function PlanReview({
     setNotice('');
     setError('');
   }, [plan?.id]);
-  async function perform(action: string, body?: unknown) {
+  async function perform(action: string, body?: Record<string, unknown>) {
+    const markingDone = action === 'status' && body?.status === 'RESOLVED';
     setBusy(true);
     setError('');
     setNotice('');
@@ -412,9 +514,12 @@ export function PlanReview({
       setNotice(
         action === 'approve'
           ? 'Approved plan queued for implementation. You will review the resulting PRs before release.'
+          : markingDone
+          ? 'Marked done.'
           : 'Saved.',
       );
-      didChange();
+      if (markingDone) didChange(thread.id);
+      else didChange();
     } catch (e) {
       if (e instanceof ApiError && [401, 403].includes(e.status)) accessLost();
       else
@@ -551,6 +656,14 @@ export function PlanReview({
               <button className="secondary" onClick={copy}>
                 Copy for AI
               </button>
+              {current && !isDone(thread.status) && (
+                <button
+                  disabled={busy || running || editing}
+                  onClick={() => perform('status', { status: 'RESOLVED' })}
+                >
+                  Mark done
+                </button>
+              )}
             </div>
           </div>
           {!current && (
